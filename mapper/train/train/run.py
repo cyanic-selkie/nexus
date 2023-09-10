@@ -26,7 +26,8 @@ if __name__ == "__main__":
     # disable_caching()
 
     model, tokenizer = instantiate_model(args.checkpoint, args.embedding_size)
-    dataset = get_dataset(tokenizer, args.language)
+    dataset, train_total, validation_total = get_dataset(
+        tokenizer, args.language)
 
     data_collator = DataCollatorForEL(tokenizer, args.embedding_size)
 

@@ -1,6 +1,5 @@
-from datasets import load_dataset, IterableDatasetDict, interleave_datasets
+from datasets import load_dataset, IterableDatasetDict, concatenate_datasets
 import numpy as np
-from multiprocessing import cpu_count
 from transformers.data.data_collator import DataCollatorMixin
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import PaddingStrategy
@@ -9,6 +8,8 @@ from typing import Union, Optional
 from dataclasses import dataclass
 import random
 import pyarrow.parquet as pq
+from os.path import isfile
+import pickle
 
 
 def bernoulli(probability: float) -> bool:
@@ -158,12 +159,19 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings,
 
 
 def get_dataset(tokenizer, languages):
-    nodes = {
-        qid: i
-        for i, qid in enumerate(
-            pq.read_table("data/nodes.parquet", columns=["qid"])
-            ["qid"].to_pylist())
-    }
+    if isfile("data/nodes.pickle"):
+        with open("data/nodes.pickle", "rb") as f:
+            nodes = pickle.load(f)
+    else:
+        nodes = {
+            qid: i
+            for i, qid in enumerate(
+                pq.read_table("data/nodes.parquet", columns=["qid"])
+                ["qid"].to_pylist())
+        }
+        with open("data/nodes.pickle", "wb") as f:
+            pickle.dump(nodes, f)
+
     embeddings = np.memmap("data/embeddings.npy",
                            np.float32,
                            "r",
@@ -172,14 +180,26 @@ def get_dataset(tokenizer, languages):
     max_length = tokenizer.model_max_length
     doc_stride = max_length // 2
 
-    train = load_dataset("cyanic-selkie/wikianc",
-                         split="train",
-                         streaming=True)
-    validation = load_dataset("cyanic-selkie/wikianc",
-                              split="validation",
-                              streaming=True)
+    train_shards = [
+        load_dataset("cyanic-selkie/wikianc", language, split="train")
+        for language in languages
+    ]
+    train_total = sum([len(shard) for shard in train_shards])
+    train = concatenate_datasets(train_shards).shuffle(seed=42)
 
-    dataset = IterableDatasetDict({"train": train, "validation": validation})
+    validation_shards = [
+        load_dataset("cyanic-selkie/wikianc", language, split="validation")
+        for language in languages
+    ]
+    validation_total = sum([len(shard) for shard in validation_shards])
+    validation = concatenate_datasets(validation_shards).shuffle(seed=42)
+
+    dataset = IterableDatasetDict({
+        "train":
+        train.to_iterable_dataset(),
+        "validation":
+        validation.to_iterable_dataset()
+    })
 
     dataset = dataset.remove_columns([
         "uuid", "article_title", "article_pageid", "article_qid",
@@ -190,12 +210,12 @@ def get_dataset(tokenizer, languages):
         "paragraph_anchors": "anchors"
     })
     dataset = dataset.map(lambda x: prepare_features(
-        x, tokenizer, max_length, doc_stride, embeddings, nodes, True),
+        x, tokenizer, max_length, doc_stride, embeddings, nodes),
                           batched=True,
                           remove_columns=["context", "anchors"])
     dataset = dataset.filter(lambda x: len(x["spans"]) > 0)
 
-    dataset = dataset.shuffle(seed=42, buffer_size=1000)
+    dataset = dataset.shuffle(seed=42, buffer_size=10000)
     dataset = dataset.with_format(type="torch")
 
-    return dataset
+    return dataset, train_total, validation_total

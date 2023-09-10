@@ -65,8 +65,8 @@ class DataCollatorForEL(DataCollatorMixin):
         return batch
 
 
-def prepare_features(examples, tokenizer, max_length, doc_stride, nodes,
-                     embeddings):
+def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings,
+                     nodes):
     tokenized_examples = tokenizer(
         examples["context"],
         truncation=True,
@@ -158,37 +158,26 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, nodes,
 
 
 def get_dataset(tokenizer, languages):
-    nodes = pq.ParquetFile("data/nodes.parquet").read()["qid"]
-    nodes = {qid: i for i, qid in enumerate(nodes)}
+    nodes = {
+        qid: i
+        for i, qid in enumerate(
+            pq.read_table("data/nodes.parquet", columns=["qid"])
+            ["qid"].to_pylist())
+    }
     embeddings = np.memmap("data/embeddings.npy",
-                           dtype="float32",
-                           mode="r",
+                           np.float32,
+                           "r",
                            shape=(len(nodes), 512))
 
     max_length = tokenizer.model_max_length
     doc_stride = max_length // 2
 
-    train_parts = [
-        load_dataset("cyanic-selkie/wikianc", language, split="train").shuffle(
-            seed=42).flatten_indices(num_proc=cpu_count())
-        for language in languages
-    ]
-    train_lengths = np.array([len(part) for part in train_parts])
-
-    train = interleave_datasets(
-        [part.to_iterable_dataset() for part in train_parts],
-        train_lengths / np.sum(train_lengths))
-
-    validation_parts = [
-        load_dataset("cyanic-selkie/wikianc", language,
-                     split="validation").shuffle(seed=42).flatten_indices(
-                         num_proc=cpu_count()) for language in languages
-    ]
-    validation_lengths = np.array([len(part) for part in validation_parts])
-
-    validation = interleave_datasets(
-        [part.to_iterable_dataset() for part in validation_parts],
-        validation_lengths / np.sum(validation_lengths))
+    train = load_dataset("cyanic-selkie/wikianc",
+                         split="train",
+                         streaming=True)
+    validation = load_dataset("cyanic-selkie/wikianc",
+                              split="validation",
+                              streaming=True)
 
     dataset = IterableDatasetDict({"train": train, "validation": validation})
 
@@ -201,12 +190,12 @@ def get_dataset(tokenizer, languages):
         "paragraph_anchors": "anchors"
     })
     dataset = dataset.map(lambda x: prepare_features(
-        x, tokenizer, max_length, doc_stride, nodes, embeddings),
+        x, tokenizer, max_length, doc_stride, embeddings, nodes, True),
                           batched=True,
                           remove_columns=["context", "anchors"])
     dataset = dataset.filter(lambda x: len(x["spans"]) > 0)
-    # dataset = dataset.shuffle(seed=42).flatten_indices()
 
+    dataset = dataset.shuffle(seed=42, buffer_size=1000)
     dataset = dataset.with_format(type="torch")
 
     return dataset

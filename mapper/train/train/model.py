@@ -74,7 +74,7 @@ class ELModel(RobertaPreTrainedModel):
         embeddings = self.mapper_2(embeddings) + embeddings
 
         loss = None
-        if return_loss and targets is not None:
+        if targets is not None:
             # Spans with indices == 0 are padding;
             # it's enough to only check the start index.
             mask = (spans[:, :, 0] != 0).unsqueeze(-1).expand_as(embeddings)

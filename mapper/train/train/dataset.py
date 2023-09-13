@@ -57,7 +57,7 @@ class DataCollatorForEL(DataCollatorMixin):
 
         batch["spans"] = batch_spans
         batch["targets"] = batch_targets
-        batch["return_loss"] = True
+        # batch["return_loss"] = True
 
         return batch
 

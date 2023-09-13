@@ -19,12 +19,13 @@ class ELModel(RobertaPreTrainedModel):
         self.roberta = RobertaModel(config, add_pooling_layer=False)
 
         self.mapper_1 = nn.Linear(config.hidden_size * 2,
-                                  config.embedding_size)
+                                  config.entity_embedding_size)
 
         self.mapper_2 = nn.Sequential(
             nn.GELU(),
-            nn.LayerNorm(config.embedding_size),
-            nn.Linear(config.embedding_size, config.embedding_size),
+            nn.LayerNorm(config.entity_embedding_size),
+            nn.Linear(config.entity_embedding_size,
+                      config.entity_embedding_size),
         )
 
         # Initialize weights and apply final processing
@@ -106,7 +107,7 @@ def instantiate_model(checkpoint, embedding_size):
                                         output_attentions=True,
                                         output_hidden_states=True)
     config = config.to_dict()
-    config["embedding_size"] = embedding_size
+    config["entity_embedding_size"] = embedding_size
     config = RobertaConfig.from_dict(config)
     model = ELModel.from_pretrained(checkpoint,
                                     config=config,

@@ -1,5 +1,4 @@
 from datasets import load_dataset, IterableDatasetDict, concatenate_datasets
-import numpy as np
 from transformers.data.data_collator import DataCollatorMixin
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import PaddingStrategy
@@ -7,9 +6,6 @@ import torch
 from typing import Union, Optional
 from dataclasses import dataclass
 import random
-import pyarrow.parquet as pq
-from os.path import isfile
-import pickle
 
 
 def bernoulli(probability: float) -> bool:
@@ -66,8 +62,7 @@ class DataCollatorForEL(DataCollatorMixin):
         return batch
 
 
-def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings,
-                     nodes):
+def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings):
     tokenized_examples = tokenizer(
         examples["context"],
         truncation=True,
@@ -100,9 +95,13 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings,
         for span in examples["anchors"][sample_index]:
             span_start, span_end, qid = span["start"], span["end"], span["qid"]
 
-            if qid is None or qid not in nodes:
+            if qid is None:
                 continue
 
+            embedding = embeddings[qid]
+
+            if embedding is None:
+                continue
             # if "tag" in span and span["tag"] == 4:
             # continue
 
@@ -135,7 +134,7 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings,
                     continue
 
                 spans.append((token_start_index, token_end_index))
-                targets.append(torch.tensor(embeddings[nodes[qid]]))
+                targets.append(torch.tensor(embedding))
 
         if len(spans) > 0:
             spans, targets = zip(
@@ -158,25 +157,7 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings,
     return tokenized_examples
 
 
-def get_dataset(tokenizer, languages):
-    if isfile("data/nodes.pickle"):
-        with open("data/nodes.pickle", "rb") as f:
-            nodes = pickle.load(f)
-    else:
-        nodes = {
-            qid: i
-            for i, qid in enumerate(
-                pq.read_table("data/nodes.parquet", columns=["qid"])
-                ["qid"].to_pylist())
-        }
-        with open("data/nodes.pickle", "wb") as f:
-            pickle.dump(nodes, f)
-
-    embeddings = np.memmap("data/embeddings.npy",
-                           np.float32,
-                           "r",
-                           shape=(len(nodes), 512))
-
+def get_dataset(tokenizer, embeddings, languages):
     max_length = tokenizer.model_max_length
     doc_stride = max_length // 2
 
@@ -209,8 +190,8 @@ def get_dataset(tokenizer, languages):
         "paragraph_text": "context",
         "paragraph_anchors": "anchors"
     })
-    dataset = dataset.map(lambda x: prepare_features(
-        x, tokenizer, max_length, doc_stride, embeddings, nodes),
+    dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length,
+                                                     doc_stride, embeddings),
                           batched=True,
                           remove_columns=["context", "anchors"])
     dataset = dataset.filter(lambda x: len(x["spans"]) > 0)

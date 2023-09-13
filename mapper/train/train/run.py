@@ -1,8 +1,8 @@
 import argparse
+from embeddings import Embeddings
 from model import instantiate_model
 from transformers import TrainingArguments, Trainer
 from dataset import DataCollatorForEL, get_dataset
-from datasets import disable_caching
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -11,7 +11,8 @@ if __name__ == "__main__":
     parser.add_argument("--continue-training", action="store_true")
 
     parser.add_argument("--embedding-size", type=int, required=True)
-    parser.add_argument('--language', action='append')
+    parser.add_argument('--language', action='append', required=True)
+    parser.add_argument('--embeddings-dir', type=str, required=True)
 
     parser.add_argument("--epochs", type=int, required=True)
     parser.add_argument("--learning-rate", type=float, required=True)
@@ -25,9 +26,11 @@ if __name__ == "__main__":
 
     # disable_caching()
 
+    embeddings = Embeddings(args.embeddings_dir)
+
     model, tokenizer = instantiate_model(args.checkpoint, args.embedding_size)
     dataset, train_total, validation_total = get_dataset(
-        tokenizer, args.language)
+        tokenizer, embeddings, args.language)
 
     data_collator = DataCollatorForEL(tokenizer, args.embedding_size)
 

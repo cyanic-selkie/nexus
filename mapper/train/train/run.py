@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     data_collator = DataCollatorForEL(tokenizer, args.embedding_size)
 
-    args = TrainingArguments(
+    training_args = TrainingArguments(
         output_dir=f"models/{args.name}",
         evaluation_strategy="epoch",
         learning_rate=args.learning_rate,
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     task = Task.init(project_name="nexus", task_name=args.name)
     trainer = Trainer(
         model,
-        args,
+        training_args,
         train_dataset=dataset["train"],
         eval_dataset=dataset["validation"],
         data_collator=data_collator,

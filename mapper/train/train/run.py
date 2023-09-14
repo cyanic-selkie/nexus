@@ -53,7 +53,7 @@ if __name__ == "__main__":
         logging_steps=100,
         warmup_steps=args.warmup_steps,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
-        max_steps=train_total * args.epochs,
+        max_steps=(train_total // args.batch_size) * args.epochs,
     )
 
     task = Task.init(project_name="nexus", task_name=args.name)

@@ -197,7 +197,6 @@ def get_dataset(tokenizer, embeddings, languages):
                           remove_columns=["context", "anchors"])
     dataset = dataset.filter(lambda x: len(x["spans"]) > 0)
 
-    dataset = dataset.shuffle(seed=42, buffer_size=10000)
     dataset = dataset.with_format(type="torch")
 
     return dataset, train_total, validation_total

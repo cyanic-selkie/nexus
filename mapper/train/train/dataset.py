@@ -165,8 +165,8 @@ def get_dataset(tokenizer, embeddings, languages):
         load_dataset("cyanic-selkie/wikianc", language, split="train")
         for language in languages
     ]
-    train_total = sum([len(shard) for shard in train_shards])
     train = concatenate_datasets(train_shards).shuffle(seed=42)
+    train_total = len(train)
 
     validation_shards = [
         load_dataset("cyanic-selkie/wikianc", language, split="validation")
@@ -174,6 +174,7 @@ def get_dataset(tokenizer, embeddings, languages):
     ]
     validation_total = sum([len(shard) for shard in validation_shards])
     validation = concatenate_datasets(validation_shards).shuffle(seed=42)
+    validation_total = len(validation)
 
     dataset = IterableDatasetDict({
         "train":

@@ -206,7 +206,22 @@ def get_dataset_conll(tokenizer, embeddings):
     max_length = tokenizer.model_max_length
     doc_stride = max_length // 2
 
-    dataset = load_dataset("cyanic-selkie/aida-conll-yago-wikidata")
+    train = load_dataset("cyanic-selkie/aida-conll-yago-wikidata",
+                         split="train")
+    train = train.shuffle(seed=42)
+    train_total = len(train)
+
+    validation = load_dataset("cyanic-selkie/aida-conll-yago-wikidata",
+                              split="validation")
+    validation = validation.shuffle(seed=42)
+    validation_total = len(validation)
+
+    dataset = IterableDatasetDict({
+        "train":
+        train.to_iterable_dataset(),
+        "validation":
+        validation.to_iterable_dataset()
+    })
 
     dataset = dataset.remove_columns(["uuid", "document_id"])
     dataset = dataset.rename_columns({
@@ -222,16 +237,29 @@ def get_dataset_conll(tokenizer, embeddings):
     dataset = dataset.shuffle(seed=42)
     dataset = dataset.with_format(type="torch")
 
-    return dataset, len(dataset["train"]), len(dataset["validation"])
+    return dataset, train_total, validation_total
 
 
 def get_dataset_cronel(tokenizer, embeddings):
     max_length = tokenizer.model_max_length
     doc_stride = max_length // 2
 
-    dataset = load_dataset("cyanic-selkie/CroNEL")
+    train = load_dataset("cyanic-selkie/CroNEL", split="train")
+    train = train.shuffle(seed=42)
+    train_total = len(train)
 
-    dataset = dataset.remove_columns(["uuid", "document_id"])
+    validation = load_dataset("cyanic-selkie/CroNEL", split="validation")
+    validation = validation.shuffle(seed=42)
+    validation_total = len(validation)
+
+    dataset = IterableDatasetDict({
+        "train":
+        train.to_iterable_dataset(),
+        "validation":
+        validation.to_iterable_dataset()
+    })
+
+    dataset = dataset.remove_columns(["document_id"])
     dataset = dataset.rename_columns({
         "text": "context",
         "entities": "anchors"
@@ -245,4 +273,4 @@ def get_dataset_cronel(tokenizer, embeddings):
     dataset = dataset.shuffle(seed=42)
     dataset = dataset.with_format(type="torch")
 
-    return dataset, len(dataset["train"]), len(dataset["validation"])
+    return dataset, train_total, validation_total

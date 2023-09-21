@@ -1,4 +1,4 @@
-from transformers import AutoTokenizer, AutoConfig, RobertaPreTrainedModel, RobertaModel, RobertaConfig
+from transformers import AutoTokenizer, AutoConfig, RobertaPreTrainedModel, RobertaModel, RobertaConfig, ElectraPreTrainedModel, ElectraModel, ElectraConfig
 from typing import Optional
 import torch
 from typing import Union, Tuple

@@ -157,7 +157,7 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings):
     return tokenized_examples
 
 
-def get_dataset(tokenizer, embeddings, languages):
+def get_dataset_wikianc(tokenizer, embeddings, languages):
     max_length = tokenizer.model_max_length
     doc_stride = max_length // 2
 
@@ -200,3 +200,49 @@ def get_dataset(tokenizer, embeddings, languages):
     dataset = dataset.with_format(type="torch")
 
     return dataset, train_total, validation_total
+
+
+def get_dataset_conll(tokenizer, embeddings):
+    max_length = tokenizer.model_max_length
+    doc_stride = max_length // 2
+
+    dataset = load_dataset("cyanic-selkie/aida-conll-yago-wikidata")
+
+    dataset = dataset.remove_columns(["uuid", "document_id"])
+    dataset = dataset.rename_columns({
+        "text": "context",
+        "entities": "anchors"
+    })
+    dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length,
+                                                     doc_stride, embeddings),
+                          batched=True,
+                          remove_columns=["context", "anchors"])
+    dataset = dataset.filter(lambda x: len(x["spans"]) > 0)
+
+    dataset = dataset.shuffle(seed=42)
+    dataset = dataset.with_format(type="torch")
+
+    return dataset, len(dataset["train"]), len(dataset["validation"])
+
+
+def get_dataset_cronel(tokenizer, embeddings):
+    max_length = tokenizer.model_max_length
+    doc_stride = max_length // 2
+
+    dataset = load_dataset("cyanic-selkie/CroNEL")
+
+    dataset = dataset.remove_columns(["uuid", "document_id"])
+    dataset = dataset.rename_columns({
+        "text": "context",
+        "entities": "anchors"
+    })
+    dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length,
+                                                     doc_stride, embeddings),
+                          batched=True,
+                          remove_columns=["context", "anchors"])
+    dataset = dataset.filter(lambda x: len(x["spans"]) > 0)
+
+    dataset = dataset.shuffle(seed=42)
+    dataset = dataset.with_format(type="torch")
+
+    return dataset, len(dataset["train"]), len(dataset["validation"])

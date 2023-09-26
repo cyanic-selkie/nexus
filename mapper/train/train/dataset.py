@@ -1,4 +1,4 @@
-from datasets import load_dataset, IterableDatasetDict, concatenate_datasets
+from datasets import load_dataset, IterableDatasetDict, concatenate_datasets, interleave_datasets
 from transformers.data.data_collator import DataCollatorMixin
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import PaddingStrategy
@@ -57,7 +57,6 @@ class DataCollatorForEL(DataCollatorMixin):
 
         batch["spans"] = batch_spans
         batch["targets"] = batch_targets
-        # batch["return_loss"] = True
 
         return batch
 
@@ -172,8 +171,7 @@ def get_dataset_wikianc(tokenizer, embeddings, languages):
         load_dataset("cyanic-selkie/wikianc", language, split="validation")
         for language in languages
     ]
-    validation_total = sum([len(shard) for shard in validation_shards])
-    validation = concatenate_datasets(validation_shards).shuffle(seed=42)
+    validation = concatenate_datasets(validation_shards)
     validation_total = len(validation)
 
     dataset = IterableDatasetDict({
@@ -213,43 +211,6 @@ def get_dataset_conll(tokenizer, embeddings):
 
     validation = load_dataset("cyanic-selkie/aida-conll-yago-wikidata",
                               split="validation")
-    validation = validation.shuffle(seed=42)
-    validation_total = len(validation)
-
-    dataset = IterableDatasetDict({
-        "train":
-        train.to_iterable_dataset(),
-        "validation":
-        validation.to_iterable_dataset()
-    })
-
-    dataset = dataset.remove_columns(["uuid", "document_id"])
-    dataset = dataset.rename_columns({
-        "text": "context",
-        "entities": "anchors"
-    })
-    dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length,
-                                                     doc_stride, embeddings),
-                          batched=True,
-                          remove_columns=["context", "anchors"])
-    dataset = dataset.filter(lambda x: len(x["spans"]) > 0)
-
-    dataset = dataset.shuffle(seed=42)
-    dataset = dataset.with_format(type="torch")
-
-    return dataset, train_total, validation_total
-
-
-def get_dataset_cronel(tokenizer, embeddings):
-    max_length = tokenizer.model_max_length
-    doc_stride = max_length // 2
-
-    train = load_dataset("cyanic-selkie/CroNEL", split="train")
-    train = train.shuffle(seed=42)
-    train_total = len(train)
-
-    validation = load_dataset("cyanic-selkie/CroNEL", split="validation")
-    validation = validation.shuffle(seed=42)
     validation_total = len(validation)
 
     dataset = IterableDatasetDict({
@@ -270,7 +231,128 @@ def get_dataset_cronel(tokenizer, embeddings):
                           remove_columns=["context", "anchors"])
     dataset = dataset.filter(lambda x: len(x["spans"]) > 0)
 
-    dataset = dataset.shuffle(seed=42)
+    dataset = dataset.with_format(type="torch")
+
+    return dataset, train_total, validation_total
+
+
+def get_dataset_cronel(tokenizer, embeddings):
+    max_length = tokenizer.model_max_length
+    doc_stride = max_length // 2
+
+    train = load_dataset("cyanic-selkie/CroNEL", split="train")
+    train = train.shuffle(seed=42)
+    train_total = len(train)
+
+    validation = load_dataset("cyanic-selkie/CroNEL", split="validation")
+    validation_total = len(validation)
+
+    dataset = IterableDatasetDict({
+        "train":
+        train.to_iterable_dataset(),
+        "validation":
+        validation.to_iterable_dataset()
+    })
+
+    dataset = dataset.remove_columns(["document_id"])
+    dataset = dataset.rename_columns({
+        "text": "context",
+        "entities": "anchors"
+    })
+    dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length,
+                                                     doc_stride, embeddings),
+                          batched=True,
+                          remove_columns=["context", "anchors"])
+    dataset = dataset.filter(lambda x: len(x["spans"]) > 0)
+
+    dataset = dataset.with_format(type="torch")
+
+    return dataset, train_total, validation_total
+
+
+def get_dataset_cronel_conll(tokenizer, embeddings):
+    max_length = tokenizer.model_max_length
+    doc_stride = max_length // 2
+
+    train_1 = load_dataset("cyanic-selkie/aida-conll-yago-wikidata",
+                           split="train").remove_columns([
+                               "document_id"
+                           ]).shuffle(seed=42).rename_columns({
+                               "text":
+                               "context",
+                               "entities":
+                               "anchors"
+                           })
+    train_2 = load_dataset(
+        "cyanic-selkie/CroNEL",
+        split="train",
+    ).remove_columns(["document_id"]).shuffle(seed=42).rename_columns({
+        "text":
+        "context",
+        "entities":
+        "anchors"
+    })
+    train_total = len(train_1) + len(train_2)
+
+    validation_1 = load_dataset("cyanic-selkie/aida-conll-yago-wikidata",
+                                split="validation").remove_columns([
+                                    "document_id"
+                                ]).shuffle(seed=42).rename_columns({
+                                    "text":
+                                    "context",
+                                    "entities":
+                                    "anchors"
+                                })
+    validation_2 = load_dataset(
+        "cyanic-selkie/CroNEL",
+        split="validation",
+    ).remove_columns(["document_id"]).shuffle(seed=42).rename_columns({
+        "text":
+        "context",
+        "entities":
+        "anchors"
+    })
+    validation_total = len(validation_1) + len(validation_2)
+
+    dataset_1 = IterableDatasetDict({
+        "train":
+        train_1.to_iterable_dataset(),
+        "validation":
+        validation_1.to_iterable_dataset()
+    })
+    dataset_2 = IterableDatasetDict({
+        "train":
+        train_2.to_iterable_dataset(),
+        "validation":
+        validation_2.to_iterable_dataset()
+    })
+
+    dataset_1 = dataset_1.map(lambda x: prepare_features(
+        x, tokenizer, max_length, doc_stride, embeddings),
+                              batched=True,
+                              remove_columns=["context", "anchors"])
+    dataset_2 = dataset_2.map(lambda x: prepare_features(
+        x, tokenizer, max_length, doc_stride, embeddings),
+                              batched=True,
+                              remove_columns=["context", "anchors"])
+
+    train = interleave_datasets(
+        [dataset_1["train"], dataset_2["train"]],
+        probabilities=[len(train_1) / train_total,
+                       len(train_2) / train_total],
+        seed=42)
+    validation = interleave_datasets(
+        [dataset_1["validation"], dataset_2["validation"]],
+        probabilities=[
+            len(validation_1) / validation_total,
+            len(validation_2) / validation_total
+        ],
+        seed=42)
+
+    dataset = IterableDatasetDict({"train": train, "validation": validation})
+
+    dataset = dataset.filter(lambda x: len(x["spans"]) > 0)
+
     dataset = dataset.with_format(type="torch")
 
     return dataset, train_total, validation_total

@@ -4,7 +4,7 @@ from clearml import Task
 from embeddings import Embeddings
 from model import instantiate_model
 from transformers import TrainingArguments, Trainer
-from dataset import DataCollatorForEL, get_dataset_wikianc, get_dataset_cronel, get_dataset_conll
+from dataset import DataCollatorForEL, get_dataset_wikianc, get_dataset_cronel, get_dataset_conll, get_dataset_cronel_conll
 
 if __name__ == "__main__":
     os.environ["CLEARML_TASK_NO_REUSE"] = "true"
@@ -15,10 +15,12 @@ if __name__ == "__main__":
 
     parser.add_argument("--embedding-size", type=int, required=True)
     parser.add_argument('--language', action='append')
-    parser.add_argument(
-        '--dataset',
-        choices=["wikianc", "cronel", "aida-conll-yago-wikidata"],
-        default="wikianc")
+    parser.add_argument('--dataset',
+                        choices=[
+                            "wikianc", "cronel", "aida-conll-yago-wikidata",
+                            "cronel+aida-conll-yago-wikidata"
+                        ],
+                        default="wikianc")
     parser.add_argument('--embeddings-dir', type=str, required=True)
 
     parser.add_argument("--epochs", type=int, required=True)
@@ -31,8 +33,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # disable_caching()
-
     embeddings = Embeddings(args.embeddings_dir)
 
     model, tokenizer = instantiate_model(args.checkpoint, args.embedding_size)
@@ -41,6 +41,9 @@ if __name__ == "__main__":
         dataset, train_total, validation_total = get_dataset_cronel(
             tokenizer, embeddings)
     elif args.dataset == "aida-conll-yago-wikidata":
+        dataset, train_total, validation_total = get_dataset_conll(
+            tokenizer, embeddings)
+    elif args.dataset == "cronel+aida-conll-yago-wikidata":
         dataset, train_total, validation_total = get_dataset_conll(
             tokenizer, embeddings)
     else:
